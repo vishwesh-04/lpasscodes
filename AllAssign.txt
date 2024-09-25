@@ -1,0 +1,484 @@
+####
+
+import java.util.concurrent.Semaphore;
+
+class BarberShop {
+    private final Semaphore customers = new Semaphore(0);
+    private final Semaphore barber = new Semaphore(0);
+    private final Semaphore mutex = new Semaphore(1);
+    private int waitingCustomers = 0;
+    private final int maxChairs;
+
+    public BarberShop(int maxChairs) {
+        this.maxChairs = maxChairs;
+    }
+
+    public void getHaircut(int customerId) throws InterruptedException {
+        mutex.acquire();
+        if (waitingCustomers < maxChairs) {
+            waitingCustomers++;
+            System.out.println("Customer " + customerId + " is waiting.");
+            mutex.release();
+            customers.release(); 
+            barber.acquire(); 
+            getHaircutAction(customerId);
+        } else {
+            System.out.println("Customer " + customerId + " leaves (no chairs available).");
+            mutex.release();
+        }
+    }
+
+    public void getHaircutAction(int customerId) {
+        System.out.println("Customer " + customerId + " is getting a haircut.");
+        try {
+            Thread.sleep(1000); 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        System.out.println("Customer " + customerId + " is done with the haircut.");
+        try {
+            mutex.acquire();
+        } catch (InterruptedException e) {
+            
+            e.printStackTrace();
+        }
+        waitingCustomers--;
+        if (waitingCustomers > 0) {
+            customers.release(); 
+        }
+        barber.release(); 
+        mutex.release();
+    }
+
+    public void barberWork() throws InterruptedException {
+        while (true) {
+            customers.acquire(); 
+            mutex.acquire();
+            waitingCustomers--;
+            System.out.println("Barber is cutting hair.");
+            mutex.release();
+            barber.release(); 
+            try {
+                Thread.sleep(1000); 
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            System.out.println("Barber is done cutting hair.");
+        }
+    }
+}
+
+class Customer extends Thread {
+    private final BarberShop shop;
+    private final int id;
+
+    public Customer(BarberShop shop, int id) {
+        this.shop = shop;
+        this.id = id;
+    }
+
+    @Override
+    public void run() {
+        try {
+            shop.getHaircut(id);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+public class SleepingBarber {
+    public static void main(String[] args) {
+        final int MAX_CHAIRS = 3;
+        final int NUM_CUSTOMERS = 10;
+
+        BarberShop shop = new BarberShop(MAX_CHAIRS);
+        
+        Thread barberThread = new Thread(() -> {
+            try {
+                shop.barberWork();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        barberThread.start();
+
+        for (int i = 1; i <= NUM_CUSTOMERS; i++) {
+            new Customer(shop, i).start();
+            try {
+                Thread.sleep((int)(Math.random() * 2000)); 
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+}
+
+
+####
+
+
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+
+class Producer implements Runnable {
+    private final BlockingQueue<Integer> queue;
+
+    public Producer(BlockingQueue<Integer> queue) {
+        this.queue = queue;
+    }
+
+    @Override
+    public void run() {
+        try {
+            for (int i = 0; i < 10; i++) {
+                System.out.println("Producing: " + i);
+                queue.put(i); // Add to the queue (blocking if full)
+                Thread.sleep(100); // Simulate time taken to produce
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+class Consumer implements Runnable {
+    private final BlockingQueue<Integer> queue;
+
+    public Consumer(BlockingQueue<Integer> queue) {
+        this.queue = queue;
+    }
+
+    @Override
+    public void run() {
+        try {
+            for (int i = 0; i < 10; i++) {
+                Integer value = queue.take(); // Remove from the queue (blocking if empty)
+                System.out.println("Consuming: " + value);
+                Thread.sleep(150); // Simulate time taken to consume
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+public class ProducerConsumerExample {
+    public static void main(String[] args) {
+        BlockingQueue<Integer> queue = new ArrayBlockingQueue<>(5); // Queue size of 5
+
+        Thread producerThread = new Thread(new Producer(queue));
+        Thread consumerThread = new Thread(new Consumer(queue));
+
+        producerThread.start();
+        consumerThread.start();
+
+        try {
+            producerThread.join();
+            consumerThread.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        System.out.println("Finished execution.");
+    }
+}
+
+
+####
+
+package Assignment_A2.JAVA;
+
+import java.util.*;
+import java.io.*;
+
+public class Pass1 implements Serializable{
+    class MNTableEntry implements Serializable{
+        public String macroName;
+        public int numKPD = 0;
+        public int numPP = 0;
+        public int MDTabPtr = 0;
+        public int kpdTabPtr = 0;
+
+        public MNTableEntry(){}
+
+        public MNTableEntry(String name,int k,int p,int mPtr,int kPtr){
+            this.macroName = name;
+            this.numKPD = k;
+            this.numPP = p;
+            this.MDTabPtr = mPtr;
+            this.kpdTabPtr = kPtr;
+        }
+    }
+
+    class MDTableEntry implements Serializable{
+        public String mnemonic;
+        public String operand1;
+        public String operand2;
+        public int op1Index = -1;
+        public int op2Index = -1;
+    }
+
+    private ArrayList<String[]> tokens = new ArrayList<>() ;
+    private ArrayList<String[]> KDPTAB = new ArrayList<>() ;
+    private ArrayList<String> PNTAB = new ArrayList<>() ;  
+    private ArrayList<MNTableEntry> MNT = new ArrayList<>() ; 
+    private ArrayList<MDTableEntry> MDT = new ArrayList<>() ; 
+    private String currentMacroName ; 
+    private HashMap<String , List<String>> pnTabHashMap = new HashMap<>();
+
+    public Pass1( String sourceFilepath ) {
+        ArrayList<String> lines = readLines( sourceFilepath ) ; 
+        for( String line : lines ) {
+            tokens.add( line.split(" ") ) ; 
+        }
+    }
+
+    public void perform() {
+        int mdtabPtr = 0 ;
+        int kpdtabPtr = 0 ;
+        for( int i = 1 ; i < tokens.size() ; i++ ) { 
+            String[] lineTokens = tokens.get( i ) ; 
+            System.out.println( Arrays.toString( lineTokens ) ) ;
+            if( tokens.get( i - 1 )[0].equals( "MACRO" ) )  {
+                currentMacroName = lineTokens[ 0 ] ; 
+                int numKPD = 0 ; 
+                int numPP = 0 ; 
+                PNTAB.clear();
+                for( int j = 1 ; j < lineTokens.length ; j++ ) {
+                    String parameter = lineTokens[ j ] ; 
+                    if( parameter.contains( "=" ) ) {
+                        KDPTAB.add( parameter.split( "=" ) ); 
+                        numKPD++ ; 
+                    }
+                    else {
+                        numPP++ ; 
+                    }
+                    System.out.println( "Parameter added : " + parameter ) ; 
+                    PNTAB.add( parameter.split("=")[0] ) ; 
+                }
+                MNT.add( new MNTableEntry( currentMacroName , numKPD , numPP , mdtabPtr , kpdtabPtr ) ) ;
+                System.out.println( "Added to map : " + currentMacroName ) ; 
+                kpdtabPtr += numKPD ; 
+                pnTabHashMap.put( currentMacroName , PNTAB ) ;  
+            }
+            else if( !lineTokens[0].equals( "MACRO" ) &&
+             !lineTokens[0].equals( "MEND" ) ) {
+                MDTableEntry entry = new MDTableEntry(); 
+                entry.mnemonic = lineTokens[0] ;   
+                List<String> currentPNTAB = pnTabHashMap.get( currentMacroName ) ; 
+                if( lineTokens[1].startsWith( "&" ) ) {
+                    int index = currentPNTAB.indexOf(lineTokens[1]) ; 
+                    entry.operand1 = lineTokens[1] ;
+                    if( index >= 0 ) { 
+                        entry.op1Index = index ; 
+                    }
+                }
+                if( lineTokens[2].startsWith( "&" ) ) {
+                    int index = currentPNTAB.indexOf(lineTokens[2]) ; 
+                    entry.operand2 = lineTokens[2] ;
+                    if( index >= 0 ) { 
+                        entry.op2Index = index ; 
+                    }
+                }
+                MDT.add( entry ) ; 
+            }
+            else if( lineTokens[0].equals( "MEND" ) ) {
+                MDTableEntry entry = new MDTableEntry(); 
+                entry.mnemonic = "MEND" ;
+                MDT.add(entry) ;    
+            }
+            mdtabPtr++ ; 
+        }
+
+        saveTable( MNT , "Assignment_A2/JAVA/MNT.dat" ) ;
+        saveTable( KDPTAB , "Assignment_A2/JAVA/KPDTAB.dat" ) ;
+        saveTable( pnTabHashMap , "Assignment_A2/JAVA/PNTAB.dat" ) ;
+        saveTable( MDT , "Assignment_A2/JAVA/MDT.dat" ) ;
+
+        printPNTAB();
+        printMNTAB();
+        printKPDTAB();
+        
+    }
+
+    private static void saveTable( Object table , String filepath ) {
+        try {
+            FileOutputStream fos = new FileOutputStream( new File( filepath ) ) ; 
+            ObjectOutputStream outputStream = new ObjectOutputStream(fos) ; 
+            outputStream.writeObject( table );
+            outputStream.flush();
+            outputStream.close();
+            fos.close();
+        }
+        catch( FileNotFoundException e ){
+            e.printStackTrace();
+        }
+        catch( IOException e ) {
+            e.printStackTrace(); 
+        }
+    }
+
+    private static ArrayList<String> readLines( String filePath ) {
+        File textFile = new File( filePath ) ;
+        ArrayList<String> lines = new ArrayList<>();  
+        try {
+            FileInputStream inputStream = new FileInputStream( textFile ) ; 
+            BufferedReader reader = new BufferedReader( new InputStreamReader( inputStream ) ) ; 
+            while( reader.ready() ) {
+                lines.add( reader.readLine() ) ; 
+            }
+            inputStream.close();
+        }
+        catch( FileNotFoundException e ) {
+            e.printStackTrace();
+        }
+        catch( IOException e ) {
+            e.printStackTrace();
+        }
+        return lines ; 
+    }
+
+    private void printMNTAB() {
+        for( MNTableEntry entry : MNT ) {
+            System.out.println( 
+                entry.macroName + " " + 
+                entry.numKPD + " " + 
+                entry.numPP + " " + 
+                entry.MDTabPtr + " " + 
+                entry.kpdTabPtr );
+        }
+    }
+
+    private void printKPDTAB() {
+        for( String[] entry : KDPTAB ) {
+            System.out.println( entry[0] + " " + entry[1] );
+        }
+    }
+
+    private void printPNTAB() {
+        Iterator<String> it = pnTabHashMap.keySet().iterator() ; 
+        while( it.hasNext() ) {
+            String macroName = it.next() ; 
+            System.out.println( "Macro Name: " + macroName ) ; 
+            List<String> params = pnTabHashMap.get( macroName ) ; 
+            for( String param : params ) {
+                System.out.println( param ) ; 
+            }
+        }
+    }
+}
+
+
+####
+
+package Assignment_A2.JAVA;
+
+import java.io.* ;
+import java.util.*;
+
+import Assignment_A2.JAVA.Pass1.*;
+
+public class Pass2 {
+    private HashMap<String,List<String>> pntabMap ; 
+    private ArrayList<String[]> kpdtab ; 
+    private ArrayList<MNTableEntry> mntab ; 
+    private ArrayList<MDTableEntry> mdtab ; 
+    private ArrayList<String[]> aptab = new ArrayList<>(); 
+
+    public Pass2( String mntabFilepath , String kpdtabFilepath , String pntabMapFilepath , String mdtabFilepath ) {
+        mntab = (ArrayList<MNTableEntry>) loadTable(mntabFilepath) ; 
+        kpdtab = (ArrayList<String[]>) loadTable(kpdtabFilepath) ; 
+        pntabMap = (HashMap<String,List<String>>) loadTable(pntabMapFilepath) ; 
+        mdtab = (ArrayList<MDTableEntry>) loadTable(mdtabFilepath) ; 
+    }
+
+    public void processCall( String call ) {
+        String macroName = call.split( "[(]" )[0] ; 
+        List<String> pntab = pntabMap.get( macroName ) ; 
+        String[] actualParams = call.split( "[(]" )[1].split( "[)]" )[0].split( "[,]" ) ;
+        for( int i = 0 ; i < actualParams.length ; i++ ) {
+            if( actualParams[i].contains( "=" ) )  {
+                // Handle default parameter
+                aptab.add( new String[]{ pntab.get(i) , actualParams[i].split("[=]")[1] } ) ;
+            } 
+            else {
+                // Positional parameter
+                aptab.add( new String[]{ pntab.get(i) , actualParams[i] } ) ;
+            }
+        }
+
+        int mdtabPtr = 0 ;
+        for( MNTableEntry entry : mntab ) {
+            if( entry.macroName == macroName ) {
+                mdtabPtr = entry.MDTabPtr ; 
+                break ; 
+            }
+        }
+
+        MDTableEntry currentEntry = mdtab.get(mdtabPtr) ; 
+        while( !currentEntry.mnemonic.equals( "MEND" ) ) {
+
+            String op1 = "" ; 
+            if( currentEntry.op1Index != -1 ) {
+                op1 = aptab.get( currentEntry.op1Index )[1]; 
+            }
+            else {
+                op1 = currentEntry.operand1 ; 
+            }
+
+            String op2 = "" ; 
+            if( currentEntry.op2Index != -1 ) {
+                op2 = aptab.get( currentEntry.op2Index )[1]; 
+            }
+            else {
+                op2 = currentEntry.operand2 ; 
+            }
+
+            System.out.println( currentEntry.mnemonic + " " + op1 + " " + op2 ) ;  
+            mdtabPtr++ ; 
+            currentEntry = mdtab.get( mdtabPtr ) ; 
+        }
+    } 
+    
+    private static Object loadTable( String filepath ) {
+        try {
+            FileInputStream fin = new FileInputStream( new File( filepath ) ) ; 
+            ObjectInputStream inputStream = new ObjectInputStream(fin) ; 
+            Object table = inputStream.readObject() ; 
+            inputStream.close();
+            fin.close();
+            return table;
+        }
+        catch( ClassNotFoundException e ){
+            e.printStackTrace();
+        }
+        catch( FileNotFoundException e ){
+            e.printStackTrace();
+        }
+        catch( IOException e ) {
+            e.printStackTrace(); 
+        }
+        return null ; 
+    }
+    
+}
+
+###
+package Assignment_A2.JAVA;
+
+public class Main {
+    public static void main(String[] args) {
+        Pass1 pass1 = new Pass1( "Assignment_A2/testcase1.txt" ) ; 
+        pass1.perform();
+        System.out.println();
+        System.out.println();
+        Pass2 pass2 = new Pass2( "Assignment_A2/JAVA/MNT.dat", "Assignment_A2/JAVA/KPDTAB.dat", "Assignment_A2/JAVA/PNTAB.dat", "Assignment_A2/JAVA/MDT.dat" ) ; 
+        pass2.processCall( "INCR(A,B,REG=AREG)" );
+    }
+}
+
+
+####
+
+
